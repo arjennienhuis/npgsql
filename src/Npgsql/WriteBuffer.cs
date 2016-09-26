@@ -185,6 +185,22 @@ namespace Npgsql
             _writePosition = pos;
         }
 
+        unsafe internal void WriteInt32Native(int i)
+        {
+            Debug.Assert(WriteSpaceLeft >= sizeof(int));
+            int* pi = &i;
+            byte* src = (byte*)pi;
+            var pos = _writePosition;
+            fixed (byte* dst = _buf)
+            {
+                dst[pos++] = *src++;
+                dst[pos++] = *src++;
+                dst[pos++] = *src++;
+                dst[pos++] = *src++;
+            }
+            _writePosition = pos;
+        }
+
         internal void WriteUInt32(uint i)
         {
             Debug.Assert(WriteSpaceLeft >= sizeof(uint));
@@ -259,6 +275,24 @@ namespace Npgsql
                 _buf[pos++] = _bitConverterUnion.b5;
                 _buf[pos++] = _bitConverterUnion.b6;
                 _buf[pos++] = _bitConverterUnion.b7;
+            }
+            _writePosition = pos;
+        }
+
+        unsafe internal void WriteDoubleNative(double d)
+        {
+            Debug.Assert(WriteSpaceLeft >= sizeof(double));
+            double* pd = &d;
+            byte* src = (byte*)pd;
+            var pos = _writePosition;
+            fixed (byte* dst = _buf)
+            {
+                for (int i = 0; i < 8; i++)
+                {
+                    dst[pos] = *src;
+                    src++;
+                    pos++;
+                }
             }
             _writePosition = pos;
         }

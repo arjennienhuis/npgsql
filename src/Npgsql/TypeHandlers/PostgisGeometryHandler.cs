@@ -69,16 +69,8 @@ namespace Npgsql.TypeHandlers
         public override bool Read([CanBeNull] out PostgisGeometry result)
         {
             _geometry_reader.MoveNext();
-            if (_geometry_reader.Current != null)
-            {
-                result = _geometry_reader.Current;
-                return true;
-            }
-            else
-            {
-                result = null;
-                return false;
-            }
+            result = _geometry_reader.Current;
+            return result != null;
         }
 
         public IEnumerable<PostgisGeometry> GeometryReader(uint? outer_srid = null)
@@ -274,21 +266,32 @@ namespace Npgsql.TypeHandlers
             while (true)
             {
                 var geom = _geometry_toWrite;
-                
+
+                Action<Coordinate2D> WritePoint = p =>
+                {
+                    _writeBuf.WriteDoubleNative(p.X);
+                    _writeBuf.WriteDoubleNative(p.Y);
+                };
+
+                Action<int> WriteInt = i =>
+                {
+                    _writeBuf.WriteInt32Native(i);
+                };
+
                 if (geom.SRID == 0 || skip_srid)
                 {
                     while (_writeBuf.WriteSpaceLeft < 5)
                         yield return false;
-                    _writeBuf.WriteByte(0); // We choose to ouput only XDR structure
-                    _writeBuf.WriteInt32((int)geom.Identifier);
+                    _writeBuf.WriteByte(BitConverter.IsLittleEndian ? (byte)1 : (byte)0);
+                    WriteInt((int)geom.Identifier);
                 }
                 else
                 {
                     while (_writeBuf.WriteSpaceLeft < 9)
                         yield return false;
-                    _writeBuf.WriteByte(0);
-                    _writeBuf.WriteInt32((int) ((uint)geom.Identifier | (uint)EwkbModifiers.HasSRID));
-                    _writeBuf.WriteInt32((int) geom.SRID);
+                    _writeBuf.WriteByte(BitConverter.IsLittleEndian ? (byte)1 : (byte)0);
+                    WriteInt((int)((uint)geom.Identifier | (uint)EwkbModifiers.HasSRID));
+                    WriteInt((int)geom.SRID);
                 }
 
                 switch (geom.Identifier)
@@ -298,8 +301,7 @@ namespace Npgsql.TypeHandlers
                             var p = (PostgisPoint)geom;
                             while (_writeBuf.WriteSpaceLeft < 16)
                                 yield return false;
-                            _writeBuf.WriteDouble(p.X);
-                            _writeBuf.WriteDouble(p.Y);
+                            WritePoint(new Coordinate2D(p.X, p.Y));
                             yield return true;
                         }
                         break;
@@ -308,13 +310,12 @@ namespace Npgsql.TypeHandlers
                             var l = (PostgisLineString)geom;
                             while (_writeBuf.WriteSpaceLeft < 4)
                                 yield return false;
-                            _writeBuf.WriteInt32(l.PointCount);
+                            WriteInt(l.PointCount);
                             foreach (var p in l)
                             {
                                 while (_writeBuf.WriteSpaceLeft < 16)
                                     yield return false;
-                                _writeBuf.WriteDouble(p.X);
-                                _writeBuf.WriteDouble(p.Y);
+                                WritePoint(p);
                             }
                             yield return true;
                         }
@@ -324,18 +325,18 @@ namespace Npgsql.TypeHandlers
                             var pol = (PostgisPolygon)geom;
                             while (_writeBuf.WriteSpaceLeft < 4)
                                 yield return false;
-                            _writeBuf.WriteInt32(pol.RingCount);
-                            foreach (var ring in pol)
+                            WriteInt(pol.RingCount);
+                            for (int i = 0; i < pol.RingCount; i++)
                             {
+                                var ring = pol[i];
                                 while (_writeBuf.WriteSpaceLeft < 4)
                                     yield return false;
-                                _writeBuf.WriteInt32(ring.Length);
+                                WriteInt(ring.Length);
                                 foreach (var p in ring)
                                 {
                                     while (_writeBuf.WriteSpaceLeft < 16)
                                         yield return false;
-                                    _writeBuf.WriteDouble(p.X);
-                                    _writeBuf.WriteDouble(p.Y);
+                                    WritePoint(p);
                                 }
                             }
                             yield return true;
@@ -349,7 +350,7 @@ namespace Npgsql.TypeHandlers
                             var coll = (IPostgisGeometryCollection)geom;
                             while (_writeBuf.WriteSpaceLeft < 4)
                                 yield return false;
-                            _writeBuf.WriteInt32(coll.GeometryCount);
+                            WriteInt(coll.GeometryCount);
 
                             foreach (var g in coll)
                             {
