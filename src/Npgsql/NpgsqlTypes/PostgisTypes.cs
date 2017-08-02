@@ -10,7 +10,7 @@ using Npgsql;
 // ReSharper disable once CheckNamespace
 namespace NpgsqlTypes
 {
-    #pragma  warning disable 1591
+#pragma warning disable 1591
     /// <summary>
     /// Represents the identifier of the Well Known Binary representation of a geographical feature specified by the OGC.
     /// http://portal.opengeospatial.org/files/?artifact_id=13227 Chapter 6.3.2.7
@@ -23,7 +23,11 @@ namespace NpgsqlTypes
         MultiPoint = 4,
         MultiLineString = 5,
         MultiPolygon = 6,
-        GeometryCollection = 7
+        GeometryCollection = 7,
+        CircularString = 8,
+        CompoundCurve = 9,
+        CurvePolygon = 10,
+        MultiSurface = 12,
     }
 
     /// <summary>
@@ -57,7 +61,7 @@ namespace NpgsqlTypes
         /// </summary>
         /// <param name="x">X coordinate</param>
         /// <param name="y">Y coordinate</param>
-        public Coordinate2D(double x, double y) { X = x; Y = y;}
+        public Coordinate2D(double x, double y) { X = x; Y = y; }
 
         // ReSharper disable CompareOfFloatsByEqualityOperator
         public bool Equals(Coordinate2D c)
@@ -87,7 +91,7 @@ namespace NpgsqlTypes
         /// </summary>
         /// <returns></returns>
         protected abstract int GetLenHelper();
-        internal abstract WkbIdentifier Identifier { get;}
+        internal abstract WkbIdentifier Identifier { get; }
 
         internal int GetLen(bool includeSRID)
         {
@@ -138,7 +142,7 @@ namespace NpgsqlTypes
     /// <summary>
     /// Represents an Ogc 2D LineString
     /// </summary>
-    public class PostgisLineString : PostgisGeometry, IEquatable<PostgisLineString>, IEnumerable<Coordinate2D>
+    public class PostgisLineString : PostgisGeometry, IEquatable<PostgisLineString>, IReadOnlyCollection<Coordinate2D>
     {
         readonly Coordinate2D[] _points;
 
@@ -164,10 +168,12 @@ namespace NpgsqlTypes
 
         public int PointCount => _points.Length;
 
+        int IReadOnlyCollection<Coordinate2D>.Count => _points.Length;
+
         public bool Equals([CanBeNull] PostgisLineString other)
         {
-            if (ReferenceEquals(other , null))
-                return false ;
+            if (ReferenceEquals(other, null))
+                return false;
 
             if (_points.Length != other._points.Length)
                 return false;
@@ -217,7 +223,7 @@ namespace NpgsqlTypes
             _rings = rings.Select(x => x.ToArray()).ToArray();
         }
 
-        public IEnumerator<IEnumerable<Coordinate2D>> GetEnumerator() 
+        public IEnumerator<IEnumerable<Coordinate2D>> GetEnumerator()
             => ((IEnumerable<IEnumerable<Coordinate2D>>)_rings).GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -234,7 +240,7 @@ namespace NpgsqlTypes
                 if (_rings[i].Length != other._rings[i].Length)
                     return false;
                 for (var j = 0; j < _rings[i].Length; j++)
-                    if (!_rings[i][j].Equals (other._rings[i][j]))
+                    if (!_rings[i][j].Equals(other._rings[i][j]))
                         return false;
             }
             return true;
@@ -264,20 +270,20 @@ namespace NpgsqlTypes
     /// <summary>
     /// Represents a Postgis 2D MultiPoint
     /// </summary>
-    public class PostgisMultiPoint : PostgisGeometry, IEquatable<PostgisMultiPoint>, IEnumerable<Coordinate2D>
+    public class PostgisMultiPoint : PostgisGeometry, IEquatable<PostgisMultiPoint>, IReadOnlyCollection<Coordinate2D>
     {
         readonly Coordinate2D[] _points;
 
         internal override WkbIdentifier Identifier => WkbIdentifier.MultiPoint;
 
         //each point of a multipoint is a postgispoint, not a building block point.
-        protected override int GetLenHelper() => 4 + _points.Length * 21; 
+        protected override int GetLenHelper() => 4 + _points.Length * 21;
 
         public IEnumerator<Coordinate2D> GetEnumerator() => ((IEnumerable<Coordinate2D>)_points).GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-        public PostgisMultiPoint (Coordinate2D[] points)
+        public PostgisMultiPoint(Coordinate2D[] points)
         {
             _points = points;
         }
@@ -296,8 +302,8 @@ namespace NpgsqlTypes
 
         public bool Equals([CanBeNull] PostgisMultiPoint other)
         {
-            if (ReferenceEquals(other ,null))
-                return false ;
+            if (ReferenceEquals(other, null))
+                return false;
 
             if (_points.Length != other._points.Length)
                 return false;
@@ -323,6 +329,8 @@ namespace NpgsqlTypes
         }
 
         public int PointCount => _points.Length;
+
+        int IReadOnlyCollection<Coordinate2D>.Count => _points.Length;
     }
 
     /// <summary>
@@ -373,7 +381,7 @@ namespace NpgsqlTypes
         public bool Equals([CanBeNull] PostgisMultiLineString other)
         {
             if (ReferenceEquals(other, null))
-                return false ;
+                return false;
 
             if (_lineStrings.Length != other._lineStrings.Length) return false;
             for (var i = 0; i < _lineStrings.Length; i++)
@@ -472,7 +480,7 @@ namespace NpgsqlTypes
     /// <summary>
     /// Represents a collection of Postgis feature.
     /// </summary>
-    public class PostgisGeometryCollection : PostgisGeometry, IEquatable<PostgisGeometryCollection>, IEnumerable<PostgisGeometry>
+    public class PostgisGeometryCollection : PostgisGeometry, IEquatable<PostgisGeometryCollection>, IReadOnlyCollection<PostgisGeometry>
     {
         readonly PostgisGeometry[] _geometries;
 
@@ -529,5 +537,90 @@ namespace NpgsqlTypes
         }
 
         public int GeometryCount => _geometries.Length;
+
+        int IReadOnlyCollection<PostgisGeometry>.Count => _geometries.Length;
+    }
+
+
+    /// <summary>
+    /// Represents an Ogc 2D CircularString
+    /// </summary>
+    public class PostgisCircularString : PostgisGeometry, IEquatable<PostgisCircularString>, IReadOnlyCollection<Coordinate2D>
+    {
+        readonly Coordinate2D[] _points;
+
+        internal override WkbIdentifier Identifier => WkbIdentifier.CircularString;
+        protected override int GetLenHelper() => 4 + _points.Length * 16;
+
+        public IEnumerator<Coordinate2D> GetEnumerator()
+            => ((IEnumerable<Coordinate2D>)_points).GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public Coordinate2D this[int index] => _points[index];
+
+        public PostgisCircularString(IEnumerable<Coordinate2D> points)
+        {
+            _points = points.ToArray();
+        }
+
+        public PostgisCircularString(Coordinate2D[] points)
+        {
+            _points = points;
+        }
+
+        public int PointCount => _points.Length;
+
+        int IReadOnlyCollection<Coordinate2D>.Count => _points.Length;
+
+        public bool Equals([CanBeNull] PostgisCircularString other)
+        {
+            if (ReferenceEquals(other, null))
+                return false;
+
+            if (_points.Length != other._points.Length)
+                return false;
+            for (var i = 0; i < _points.Length; i++)
+                if (!_points[i].Equals(other._points[i]))
+                    return false;
+            return true;
+        }
+
+        public override bool Equals([CanBeNull] object obj)
+            => Equals(obj as PostgisCircularString);
+
+        public static bool operator ==([CanBeNull] PostgisCircularString x, [CanBeNull] PostgisCircularString y)
+            => ReferenceEquals(x, null) ? ReferenceEquals(y, null) : x.Equals(y);
+
+        public static bool operator !=(PostgisCircularString x, PostgisCircularString y) => !(x == y);
+
+        public override int GetHashCode()
+        {
+            var ret = 266370105;//seed with something other than zero to make paths of all zeros hash differently.
+            foreach (var t in _points)
+                ret ^= PGUtil.RotateShift(t.GetHashCode(), ret % sizeof(int));
+            return ret;
+        }
+    }
+
+    public class PostgisCompoundCurve : PostgisGeometryCollection
+    {
+        internal override WkbIdentifier Identifier => WkbIdentifier.CompoundCurve;
+        public PostgisCompoundCurve(IEnumerable<PostgisGeometry> geometries) : base(geometries) { }
+        public PostgisCompoundCurve(PostgisGeometry[] geometries) : base(geometries) { }
+    }
+
+    public class PostgisCurvePolygon : PostgisGeometryCollection
+    {
+        internal override WkbIdentifier Identifier => WkbIdentifier.CurvePolygon;
+        public PostgisCurvePolygon(IEnumerable<PostgisGeometry> geometries) : base(geometries) { }
+        public PostgisCurvePolygon(PostgisGeometry[] geometries) : base(geometries) { }
+    }
+
+    public class PostgisMultiSurface : PostgisGeometryCollection
+    {
+        internal override WkbIdentifier Identifier => WkbIdentifier.MultiSurface;
+        public PostgisMultiSurface(IEnumerable<PostgisGeometry> geometries) : base(geometries) { }
+        public PostgisMultiSurface(PostgisGeometry[] geometries) : base(geometries) { }
     }
 }
