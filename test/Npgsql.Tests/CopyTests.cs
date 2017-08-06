@@ -746,7 +746,6 @@ namespace Npgsql.Tests
 
                 using (var writer = conn.BeginBinaryImport("COPY dataa (foo, barr) FROM STDIN BINARY"))
                 {
-		            Console.WriteLine("Huh?");
                     writer.StartRow();
                     writer.Write(3.0, NpgsqlDbType.Integer);
                     writer.Write((object)new[] {1,2,3});
