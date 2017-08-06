@@ -754,10 +754,9 @@ namespace Npgsql.Tests
                     writer.Write((object)new List<int>() {4,5,6});
                     writer.Commit();
                 }
-		        Assert.That(1, Is.EqualTo(1));
+                Assert.That(1, Is.EqualTo(1));
             }
         }
-
         #endregion
 
         #region Utils
